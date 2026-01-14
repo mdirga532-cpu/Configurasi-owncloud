@@ -1,0 +1,118 @@
+echo "deb http://deb.debian.org/debian bookworm contrib main non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates contrib main non-free-firmware
+deb http://deb.debian.org/debian bookworm-backports contrib main non-free-firmware
+deb http://deb.debian.org/debian-security bookworm-security contrib main non-free-firmware" > /etc/apt/sources.list
+
+apt update&&upgrade -y
+
+apt install bind9 dnsutils apache2 proftpd curl unzip openssh-server vim -y
+
+
+apt install -y software-properties-common ca-certificates lsb-release apt-transport-https
+
+mkdir -p /etc/apt/keyrings
+
+curl -fsSL https://packages.sury.org/php/apt.gpg | tee /etc/apt/keyrings/sury-php.gpg > /dev/null 
+
+echo "deb [signed-by=/etc/apt/keyrings/sury-php.gpg] https://packages.sury.org/php $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/sury-php.list
+
+apt update
+
+apt install mariadb-server php7.4 php7.4-{opcache,gd,curl,mysqlnd,intl,json,ldap,mbstring,mysqlnd,xml,zip} -y
+
+
+---konfigurasi dns----
+cd /etc/bind
+
+nano named.conf 
+
+zone	"dirga.net" {
+	type master;
+	file "/etc/bind/db.ukk";
+};
+zone	"100.168.192.in-addr.arpa" {	
+	type master;
+	file "/etc/bind/db.192";
+};
+
+cp db.local db.ukk && cp db.127 db.192
+
+ vim  db.ukk
+; BIND data file for local loopback interface
+$TTL		604800
+@		IN		SOA		dirga.net.  root.dirga.net.  (
+								2		; Serial
+							604800			; Refresh
+							 86400			; Retry
+					    		2419200			; Expire
+					    		 604800  )		; Negative Cache TTL
+
+;
+@		IN		NS		ns.dirga.net.
+@		IN		A		192.168.100.254
+ns		IN		A		192.168.100.254
+
+vim  db.192
+$TTL		604800
+@		IN		SOA		dirga.biz.  root.dirga.net.	(
+								1			; Serial
+								604800			; Refresh
+						 		86400			; Retry
+					    			2419200			; Expire
+					    			 604800  )		; Negative Cache TTL
+;
+@		IN		NS		ns.dirga.net.
+254		IN		PTR		ns.dirga.net.  
+
+etc/bind#  vim  /etc/resolv.conf
+nameserver  192.168.100.254
+nameserver  8.8.8.8
+
+
+------- Konfigurasi FTP -------
+Silahkan akses di WinSCP
+File protokol FTP
+hostname = 192.168.100.254
+Port	 = 21
+username = ukk		
+password = 1q
+Login
+
+
+--------- Konfigurasi Owncloud -------
+
+mysql_secure_installation
+
+Enter current password for root (enter for none):
+Set root password? [Y/n] Y
+New password:
+Re-enter new password:
+Remove anonymous users? [Y/n] Y
+Disallow root login remotely? [Y/n] Y
+Remove test database and access to it? [Y/n] Y
+Reload privilege tables now? [Y/n] Y
+
+mysql -u root -p -e "CREATE DATABASE owncloud;
+GRANT ALL PRIVILEGES ON owncloud.* TO 'owncloud'@'localhost' IDENTIFIED BY '1q';
+FLUSH PRIVILEGES;"
+
+unzip /home/ukk/owncloud-complete-latest.zip -d /var/www/html/ && \
+chown -R www-data:www-data /var/www/html/owncloud/ && \
+cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/owncloud.conf
+
+sed 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/owncloud|' \
+/etc/apache2/sites-available/000-default.conf > /etc/apache2/sites-available/owncloud.conf
+
+a2dissite 000-default.conf && a2ensite owncloud.conf && systemctl restart apache2
+
+mengatur Untrusted domain
+nano /var/www/html/owncloud/config/config.php
+
+'trusted_domains' => array (
+    0 => 'dirga.net',
+    1 => '192.168.1.100',  // IP Server OwnCloud
+    
+
+
+
+LANJUKAN KONFIGURASI OWNCLOUD DI BROWSER
